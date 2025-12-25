@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTF - Quiz CAN 2025</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- EmailJS - NPM CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/build/email.min.js" defer></script>
+</head>
+<body>
+    <!-- Bouton de connexion Google -->
+    <div id="google-login-btn" class="google-login-btn"></div>
+    
+    <!-- Profil utilisateur -->
+    <div id="user-profile-card" class="user-profile-card hidden">
+        <img id="user-profile-pic" src="logo_ftf.png" alt="Profil" class="profile-pic">
+        <div class="profile-info">
+            <span id="user-profile-name"></span>
+            <a href="#" onclick="showLogoutConfirm(); return false;" class="logout-link">Déco</a>
+        </div>
+    </div>
+    
+    <div id="scores-board" class="scores-board hidden"></div>
+    
+    <video autoplay muted loop id="background-video">
+        <source src="background.mp4" type="video/mp4">
+    </video>
+
+    <!-- Overlay et Modale de déconnexion (au niveau racine) -->
+    <div id="logout-overlay" class="logout-overlay hidden"></div>
+    <div id="logout-confirm-message" class="logout-modal hidden">
+        <div style="text-align: center;">
+            <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Déconnexion</h2>
+            <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Voulez-vous vraiment vous déconnecter ?</p>
+            <div style="display: flex; gap: 10px; margin-top: 30px;">
+                <button onclick="confirmLogout()" class="login-btn" style="flex: 1; background: #E70013;">Déconnexion</button>
+                <button onclick="cancelLogout()" class="login-btn" style="flex: 1; background: #666;">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale de confirmation - Réinitialiser les scores -->
+    <div id="reset-confirm-modal" class="login-form hidden" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;">
+        <div style="text-align: center;">
+            <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Réinitialiser les scores</h2>
+            <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Êtes-vous sûr de vouloir réinitialiser tous les scores ?</p>
+            <div style="display: flex; gap: 10px; margin-top: 30px;">
+                <button onclick="confirmResetScores()" class="login-btn" style="flex: 1; background: #E70013;">Oui, réinitialiser</button>
+                <button onclick="cancelResetScores()" class="login-btn" style="flex: 1; background: #666;">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Écran de Login -->
+    <div id="login-screen" class="screen">
+        <div class="login-container">
+            <img src="logo.png" alt="Logo" style="width: 350px; height: auto; margin-bottom: 30px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));">
+            
+            <!-- Formulaire d'inscription -->
+            <div id="signup-form" class="login-form">
+                <h2>Créer un compte</h2>
+                <input type="email" id="signup-email" placeholder="Adresse email" class="login-input">
+                <input type="text" id="signup-pseudo" placeholder="Pseudo (max 10 caractères)" class="login-input" oninput="validatePseudoLength('signup-pseudo')">
+                <div class="password-input-container">
+                    <input type="password" id="signup-password" placeholder="Mot de passe: min 8 chars, 1 spécial (!,?,@,#,&,*), 1 chiffre" class="login-input password-input">
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('signup-password')">👁️</button>
+                </div>
+                <button onclick="register()" class="login-btn">S'inscrire</button>
+                <p class="toggle-form">Vous avez un compte? <a onclick="toggleLoginForm()">Se connecter</a></p>
+            </div>
+            
+            <!-- Formulaire de connexion -->
+            <div id="login-form" class="login-form hidden">
+                <h2>Se connecter</h2>
+                <input type="text" id="login-email" placeholder="Email ou Pseudo" class="login-input">
+                <div class="password-input-container">
+                    <input type="password" id="login-password" placeholder="Mot de passe" class="login-input password-input">
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('login-password')">👁️</button>
+                </div>
+                <button onclick="login()" class="login-btn">Connexion</button>
+                <p class="toggle-form"><a onclick="showPasswordReset()">Mot de passe oublié?</a></p>
+                <p class="toggle-form">Pas de compte? <a onclick="toggleLoginForm()">S'inscrire</a></p>
+            </div>
+            
+            <!-- Écran d'attente vérification email -->
+            <div id="email-verification-pending" class="login-form hidden">
+                <h2>Vérification en cours</h2>
+                <p style="text-align: center; color: white; margin: 25px 0; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Un code de vérification a été envoyé à</p>
+                <p style="text-align: center; color: white; font-weight: bold; font-size: 15px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);" id="pending-verification-email"></p>
+                <p style="text-align: center; color: white; font-size: 13px; margin-bottom: 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Consultez votre boîte mail et entrez le code reçu ci-dessous</p>
+                <input type="text" id="verification-code" placeholder="Entrez le code de vérification" class="login-input" maxlength="6">
+                <button onclick="verifyEmail()" class="login-btn">Vérifier</button>
+                <p class="toggle-form"><a onclick="cancelVerification()">Annuler</a></p>
+            </div>
+            
+            <!-- Formulaire réinitialisation mot de passe -->
+            <div id="password-reset-form" class="login-form hidden">
+                <h2>Réinitialiser le mot de passe</h2>
+                <p style="text-align: center; color: white; margin-bottom: 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Entrez votre email pour recevoir les instructions</p>
+                <input type="email" id="reset-email" placeholder="Votre adresse email" class="login-input">
+                <button onclick="sendPasswordReset()" class="login-btn">Envoyer le lien</button>
+                <p class="toggle-form"><a onclick="cancelPasswordReset()">Retour</a></p>
+            </div>
+            
+            <!-- Écran d'attente réinitialisation mot de passe -->
+            <div id="password-reset-pending" class="login-form hidden">
+                <h2>Email envoyé</h2>
+                <p style="text-align: center; color: white; margin: 25px 0; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Un code de réinitialisation a été envoyé à</p>
+                <p style="text-align: center; color: white; font-weight: bold; font-size: 15px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);" id="pending-reset-email"></p>
+                <p style="text-align: center; color: white; font-size: 13px; margin-bottom: 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Consultez votre boîte mail et entrez le code reçu ci-dessous</p>
+                <input type="text" id="reset-verification-code" placeholder="Entrez le code" class="login-input" maxlength="6">
+                <button onclick="verifyPasswordReset()" class="login-btn">Vérifier</button>
+                <p class="toggle-form"><a onclick="cancelPasswordReset()">Annuler</a></p>
+            </div>
+            
+            <!-- Formulaire changement mot de passe -->
+            <div id="password-change-form" class="login-form hidden">
+                <h2>Nouveau mot de passe</h2>
+                <p style="text-align: center; color: white; margin-bottom: 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Entrez votre nouveau mot de passe</p>
+                <div class="password-input-container">
+                    <input type="password" id="new-password" placeholder="Mot de passe: min 8 chars, 1 spécial (!,?,@,#,&,*), 1 chiffre" class="login-input password-input">
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('new-password')">👁️</button>
+                </div>
+                <button onclick="updatePassword()" class="login-btn">Confirmer</button>
+                <p class="toggle-form"><a onclick="cancelPasswordChange()">Annuler</a></p>
+            </div>
+            
+            <!-- Modale succès réinitialisation mot de passe -->
+            <div id="password-reset-success" class="login-form success-message hidden">
+                <div style="text-align: center;">
+                    <div class="success-icon">✅</div>
+                    <h2 style="color: white; margin: 20px 0; font-size: 28px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Mot de passe réinitialisé!</h2>
+                    <p style="color: white; margin: 20px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Votre mot de passe a été modifié avec succès.</p>
+                    <p style="color: white; font-size: 13px; margin-bottom: 30px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.</p>
+                    <button onclick="goToLogin()" class="login-btn" style="background: linear-gradient(135deg, #27AE60, #229954);">Aller à la connexion</button>
+                </div>
+            </div>
+            
+            <!-- Modale code incorrect pour vérification email -->
+            <div id="wrong-email-code-message" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">❌ Code incorrect</h2>
+                    <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Le code que vous avez entré ne correspond pas.</p>
+                    <p style="color: white; font-size: 13px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Vérifiez votre boîte mail et réessayez.</p>
+                    <button onclick="closeWrongEmailCode()" class="login-btn">Réessayer</button>
+                </div>
+            </div>
+            
+            <!-- Modale code incorrect pour réinitialisation mot de passe -->
+            <div id="wrong-reset-code-message" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">❌ Code incorrect</h2>
+                    <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Le code que vous avez entré ne correspond pas.</p>
+                    <p style="color: white; font-size: 13px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Vérifiez votre boîte mail et réessayez.</p>
+                    <button onclick="closeWrongResetCode()" class="login-btn">Réessayer</button>
+                </div>
+            </div>
+            
+            <!-- Message email existant -->
+            <div id="email-exists-message" class="login-form hidden">
+                <h2 style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">⚠️ Email déjà utilisé</h2>
+                <p style="text-align: center; color: white; margin: 25px 0; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Cet email est déjà associé à un compte.</p>
+                <p style="text-align: center; color: white; font-size: 14px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Connectez-vous avec vos identifiants existants.</p>
+                <button onclick="goToLogin()" class="login-btn">Aller à la connexion</button>
+            </div>
+            
+            <!-- Message pseudo déjà utilisé -->
+            <div id="pseudo-exists-message" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">⚠️ Pseudo déjà utilisé</h2>
+                    <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Ce pseudo est déjà pris par un autre utilisateur.</p>
+                    <p style="color: white; font-size: 13px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Veuillez choisir un pseudo différent.</p>
+                    <button onclick="goBackToSignup()" class="login-btn">Retour à l'inscription</button>
+                </div>
+            </div>
+            
+            <!-- Modales d'erreur - Champs obligatoires vides -->
+            <div id="error-empty-fields-signup" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">⚠️ Champs obligatoires</h2>
+                    <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Email, Pseudo et Mot de passe sont obligatoires.</p>
+                    <button onclick="closeErrorSignup()" class="login-btn">Fermer</button>
+                </div>
+            </div>
+            
+            <div id="error-empty-fields-login" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">⚠️ Champs obligatoires</h2>
+                    <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Email/Pseudo et Mot de passe sont obligatoires.</p>
+                    <button onclick="closeErrorLogin()" class="login-btn">Fermer</button>
+                </div>
+            </div>
+            
+            <div id="error-empty-email-reset" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">⚠️ Email obligatoire</h2>
+                    <p style="color: white; margin: 25px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Entrez votre adresse email pour réinitialiser votre mot de passe.</p>
+                    <button onclick="closeErrorReset()" class="login-btn">Fermer</button>
+                </div>
+            </div>
+            
+            <!-- Confirmation de connexion réussie -->
+            <div id="login-success-message" class="login-form hidden">
+                <div style="text-align: center;">
+                    <h2 style="color: white; font-size: 32px; margin: 20px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">✅</h2>
+                    <h2 style="color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Connexion réussie!</h2>
+                    <p style="color: white; margin: 20px 0; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Bienvenue <strong id="success-pseudo"></strong></p>
+                    <p style="color: white; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Redirection en cours...</p>
+                </div>
+            </div>
+            
+            <!-- Message pas de compte -->
+            <div id="no-account-message" class="login-form hidden">
+                <h2>Compte non trouvé</h2>
+                <p style="text-align: center; color: white; margin: 25px 0; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Aucun compte n'existe avec ces identifiants.</p>
+                <p style="text-align: center; color: white; font-size: 14px; margin-bottom: 25px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Créez un nouveau compte pour continuer.</p>
+                <button onclick="goToSignup()" class="login-btn">Créer un compte</button>
+                <p class="toggle-form"><a onclick="backToLogin()">Retour à la connexion</a></p>
+            </div>
+            
+            <!-- Message succès inscription -->
+            <div id="signup-success-message" class="login-form success-message hidden">
+                <div style="text-align: center;">
+                    <div class="success-icon">✅</div>
+                    <h2 style="color: white; margin: 20px 0; font-size: 28px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Compte créé!</h2>
+                    <p style="color: white; margin: 20px 0; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Votre inscription a été confirmée avec succès.</p>
+                    <p style="color: white; font-size: 13px; margin-bottom: 30px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Email vérifié - Vous pouvez accéder au site</p>
+                    <button onclick="goToMainMenu()" class="login-btn" style="background: linear-gradient(135deg, #27AE60, #229954);">Accéder au site</button>
+                </div>
+            </div>
+            
+            <!-- Confirmation déconnexion -->
+            </div>
+        </div>
+    </div>
+
+    <div id="main-menu" class="screen">
+        <img src="logo.png" alt="Logo FTF" class="main-logo">
+        <div class="menu-cards">
+            <div class="card clickable" onclick="showQuizMenu()">
+                <h2>Quiz</h2>
+                <p>Testez vos connaissances sur l'équipe nationale.</p>
+            </div>
+            <div class="card clickable" onclick="showList()">
+                <h2>Joueurs</h2>
+                <p>Découvrez l'effectif complet des Aigles de Carthage.</p>
+            </div>
+            <div class="card clickable" onclick="showCalendar()">
+                <h2>Matchs</h2>
+                <p>Dates, heures et résultats des rencontres.</p>
+            </div>
+            <div class="card clickable" onclick="showGroups()">
+                <h2>Groupes</h2>
+                <p>Découvrez les groupes et les équipes engagées.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-menu" class="screen hidden">
+        <h1>Choisir le mode de Quiz</h1>
+        <div class="menu-cards">
+            <div class="card clickable" onclick="showQuizMode()">
+                <h2>Trouver le Joueur</h2>
+                <p>On te montre le nom, trouve l'image parmi 9 joueurs.</p>
+            </div>
+            <div class="card clickable" onclick="showQuizNameMode()">
+                <h2>Deviner le Nom</h2>
+                <p>On te montre la photo, rentre le nom et le poste.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-mode-screen" class="screen hidden">
+        <h1>Trouver le Joueur</h1>
+        <div class="quiz-mode-all-cards">
+            <div class="card clickable" onclick="startQuizGuessImage('all')">
+                <h2>Tous</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessImage('category','Gardien')">
+                <h2>Gardiens</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessImage('category','Défenseur')">
+                <h2>Défenseurs</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessImage('category','Milieu')">
+                <h2>Milieux</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessImage('category','Attaquant')">
+                <h2>Attaquants</h2>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-name-mode-screen" class="screen hidden">
+        <h1>Trouver le Nom</h1>
+        <div class="quiz-mode-all-cards">
+            <div class="card clickable" onclick="startQuizGuessName('all')">
+                <h2>Tous</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessName('category','Gardien')">
+                <h2>Gardiens</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessName('category','Défenseur')">
+                <h2>Défenseurs</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessName('category','Milieu')">
+                <h2>Milieux</h2>
+            </div>
+            <div class="card clickable" onclick="startQuizGuessName('category','Attaquant')">
+                <h2>Attaquants</h2>
+            </div>
+        </div>
+    </div>
+
+    <div id="list-screen" class="screen hidden">
+        <h1>Liste des Aigles de Carthage</h1>
+        <div id="players-list-container" class="list-grid"></div>
+    </div>
+
+    <div id="calendar-screen" class="screen hidden">
+        <h1>Calendrier des Matchs</h1>
+        <div class="calendar-wrapper">
+            <div id="calendar-container" class="calendar-grid"></div>
+            <div class="map-container">
+                <img src="Maroc/Carte.png" alt="Carte du Maroc" class="map-image">
+                <img src="Maroc/lieux.png" alt="Lieux" class="city-overlay lieux-overlay">
+                <div class="city-button rabat-button" onclick="openCityModal('rabat')">Rabat</div>
+                <div class="city-button fes-button" onclick="openCityModal('fes')">Fes</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="city-modal" class="modal hidden">
+        <div class="city-modal-content">
+            <button class="close-btn" onclick="closeCityModal()"><img src="croix.png" alt="Fermer"></button>
+            <img id="stadium-bg" src="" alt="Stade" class="stadium-bg">
+            <div class="city-match-info">
+                <div class="city-match-title" id="city-match-title"></div>
+                <div class="city-match-flags" id="city-match-flags"></div>
+                <div class="city-match-details" id="city-match-details"></div>
+            </div>
+            <div class="city-match-nav" id="city-match-nav">
+                <span class="match-indicator" id="match-indicator"></span>
+                <button class="nav-arrow" id="city-nav-arrow" onclick="switchCityMatch()">
+                    <img src="flèche.png" alt="Naviguer">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="groups-screen" class="screen hidden">
+        <h1>Groupes</h1>
+        <div id="groups-container" class="groups-grid"></div>
+    </div>
+
+    <div id="detail-modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closePlayerDetails()"><img src="croix.png" alt="Fermer"></button>
+            <div class="modal-header">
+                <img id="detail-photo" src="" alt="Joueur" class="modal-photo">
+                <div class="modal-info-main">
+                    <h2 id="detail-nom"></h2>
+                    <p id="detail-poste" class="poste-badge" style="cursor: pointer;" onclick="filterByPosition(document.getElementById('detail-poste').textContent)"></p>
+                </div>
+            </div>
+            <div class="modal-details">
+                <div class="detail-item">
+                    <span class="label">Âge:</span>
+                    <span id="detail-age"></span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Taille:</span>
+                    <span id="detail-taille"></span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Pied fort:</span>
+                    <span id="detail-pied"></span>
+                </div>
+                <div class="detail-item club-item">
+                    <span class="label">Club:</span>
+                    <div class="club-info">
+                        <img id="detail-club-logo" src="" alt="Logo club" class="club-logo">
+                        <span id="detail-club-text"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-screen" class="screen hidden">
+        <div class="quiz-card">
+            <h2 id="quiz-player-name">Qui est-ce ?</h2>
+            <div id="quiz-players-grid" class="quiz-players-grid"></div>
+        </div>
+        <div id="quiz-feedback"></div>
+        <div id="quiz-score">Joueur 1 / 28</div>
+    </div>
+
+    <div id="quiz-name-screen" class="screen hidden">
+        <div class="quiz-card">
+            <img id="quiz-img" src="" alt="Joueur">
+            <div class="score-info-name">
+                <span id="current-score-name">0</span> pts
+            </div>
+            <div class="inputs">
+                <input type="text" id="input-nom" placeholder="Nom du joueur">
+                <input type="text" id="input-poste" placeholder="Poste (Gardien, Défenseur, Milieu, Attaquant)">
+                <input type="text" id="input-club" placeholder="Club (facultatif)">
+            </div>
+            <div id="quiz-feedback-name"></div>
+        </div>
+        <div id="quiz-score-name">Joueur 1 / 28</div>
+    </div>
+
+    <!-- Modale de fin de quiz - Mode Trouver l'image -->
+    <div id="quiz-end-modal" class="login-form hidden">
+        <div style="text-align: center;">
+            <h2 id="quiz-end-title" style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Quiz Terminé !</h2>
+            <div style="font-size: 48px; font-weight: bold; color: #FFD700; margin: 30px 0;" id="quiz-end-score"></div>
+            <div style="font-size: 20px; margin-bottom: 20px; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);" id="quiz-end-percentage"></div>
+            <div style="font-size: 16px; margin-bottom: 30px; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);" id="quiz-end-time"></div>
+            <button onclick="goBackToQuizMode()" class="login-btn" style="background: #4CAF50; margin-top: 20px;">Rejouer</button>
+        </div>
+    </div>
+
+    <!-- Modale de fin de quiz - Mode Trouver le nom -->
+    <div id="quiz-end-name-modal" class="login-form hidden">
+        <div style="text-align: center;">
+            <h2 id="quiz-end-name-title" style="color: white; margin: 20px 0; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Quiz Terminé !</h2>
+            <div style="font-size: 48px; font-weight: bold; color: #FFD700; margin: 30px 0;" id="quiz-end-name-score"></div>
+            <div style="font-size: 20px; margin-bottom: 20px; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);" id="quiz-end-name-percentage"></div>
+            <div style="font-size: 16px; margin-bottom: 30px; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3);" id="quiz-end-name-time"></div>
+            <button onclick="goBackToQuizNameMode()" class="login-btn" style="background: #4CAF50; margin-top: 20px;">Rejouer</button>
+        </div>
+    </div>
+
+    <div id="video-modal" class="modal hidden">
+        <div class="video-modal-content">
+            <button class="close-btn" onclick="closeVideoPlayer()"><img src="croix.png" alt="Fermer"></button>
+            <video id="video-player" class="video-js vjs-big-play-centered" preload="auto"></video>
+            <div class="custom-controls">
+                <button id="custom-volume-btn" class="custom-control-btn" onclick="toggleMute()">
+                    <img src="volume.png" alt="Volume">
+                </button>
+                <button id="custom-fullscreen-btn" class="custom-control-btn" onclick="toggleFullscreen()">
+                    <img src="plein-ecran.png" alt="Plein écran">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <button id="back-btn-floating" class="floating-back-btn" onclick="goBack()"><img src="flèche.png" alt="Retour"></button>
+
+    <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
+    <script src="script.js"></script>
+    
+    <a href="https://www.tiktok.com/@tunisia_mapping" target="_blank" class="tunisia-mapping-link">
+        <img src="Tunisia-Mapping.png" alt="Tunisia Mapping">
+    </a>
+</body>
+</html>
